@@ -17,7 +17,7 @@ export class TodoPresenter {
     this.id = todo.id;
     this.content = todo.content;
     this.isDone = todo.isDone;
-    this.createdate = todo.createdate;
-    this.updateddate = todo.updateddate;
+    this.createdate = todo.createdDate;
+    this.updateddate = todo.updatedDate;
   }
 }
