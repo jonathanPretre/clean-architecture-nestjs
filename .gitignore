@@ -1,2 +1,5 @@
 server/node_modules
 server/dist
+server/coverage
+server/coverage-e2e
+test/coverage
