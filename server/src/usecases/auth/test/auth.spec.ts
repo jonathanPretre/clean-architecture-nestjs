@@ -68,28 +68,90 @@ describe('uses_cases/authentication', () => {
     });
   });
 
-  describe('validation user', () => {
+  describe('validation local strategy', () => {
     it('should return null because user not found', async () => {
       (adminUserRepo.getUserByUsername as jest.Mock).mockReturnValue(() => null);
 
       expect(await loginUseCases.validateUserForLocalStragtegy('username', 'password')).toEqual(null);
     });
     it('should return null because wrong password', async () => {
-      (adminUserRepo.getUserByUsername as jest.Mock).mockReturnValue(
-        () => ({ username: 'username', password: 'wrong' } as UserM),
-      );
+      const user: UserM = {
+        id: 1,
+        username: 'username',
+        password: 'password',
+        createDate: new Date(),
+        updatedDate: new Date(),
+        lastLogin: null,
+        hashRefreshToken: 'refresh token',
+      };
+      (adminUserRepo.getUserByUsername as jest.Mock).mockReturnValue(Promise.resolve(user));
       (bcryptService.compare as jest.Mock).mockReturnValue(false);
 
       expect(await loginUseCases.validateUserForLocalStragtegy('username', 'password')).toEqual(null);
     });
     it('should return user without password', async () => {
-      const { password, ...rest } = new UserM();
-      (adminUserRepo.getUserByUsername as jest.Mock).mockReturnValue(
-        () => ({ username: 'username', password: 'password' } as UserM),
-      );
+      const user: UserM = {
+        id: 1,
+        username: 'username',
+        password: 'password',
+        createDate: new Date(),
+        updatedDate: new Date(),
+        lastLogin: null,
+        hashRefreshToken: 'refresh token',
+      };
+      (adminUserRepo.getUserByUsername as jest.Mock).mockReturnValue(Promise.resolve(user));
       (bcryptService.compare as jest.Mock).mockReturnValue(true);
 
+      const { password, ...rest } = user;
+
       expect(await loginUseCases.validateUserForLocalStragtegy('username', 'password')).toEqual(rest);
+    });
+  });
+
+  describe('Validation jwt strategy', () => {
+    it('should return null because user not found', async () => {
+      (adminUserRepo.getUserByUsername as jest.Mock).mockReturnValue(Promise.resolve(null));
+
+      expect(await loginUseCases.validateUserForJWTStragtegy('username')).toEqual(null);
+    });
+
+    it('should return user', async () => {
+      const user: UserM = {
+        id: 1,
+        username: 'username',
+        password: 'password',
+        createDate: new Date(),
+        updatedDate: new Date(),
+        lastLogin: null,
+        hashRefreshToken: 'refresh token',
+      };
+      (adminUserRepo.getUserByUsername as jest.Mock).mockReturnValue(Promise.resolve(user));
+
+      expect(await loginUseCases.validateUserForJWTStragtegy('username')).toEqual(user);
+    });
+  });
+
+  describe('Validation refresh token', () => {
+    it('should return null because user not found', async () => {
+      (adminUserRepo.getUserByUsername as jest.Mock).mockReturnValue(() => null);
+
+      expect(await loginUseCases.getUserIfRefreshTokenMatches('refresh token', 'username')).toEqual(null);
+    });
+
+    it('should return user', async () => {
+      const user: UserM = {
+        id: 1,
+        username: 'username',
+        password: 'password',
+        createDate: new Date(),
+        updatedDate: new Date(),
+        lastLogin: null,
+        hashRefreshToken: 'refresh token',
+      };
+      (adminUserRepo.getUserByUsername as jest.Mock).mockReturnValue(Promise.resolve(user));
+      (bcryptService.compare as jest.Mock).mockReturnValue(true);
+
+      expect(await loginUseCases.getUserIfRefreshTokenMatches('refresh token', 'username')).toEqual(user);
     });
   });
 });

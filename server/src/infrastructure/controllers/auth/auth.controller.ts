@@ -1,4 +1,4 @@
-import { Controller, Get, Inject, Post, Req, Request, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Inject, Post, Req, Request, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiBody, ApiExtraModels, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 
 import { AuthLoginDto } from './auth-dto.class';
@@ -39,11 +39,10 @@ export class AuthController {
   @ApiBearerAuth()
   @ApiBody({ type: AuthLoginDto })
   @ApiOperation({ description: 'login' })
-  async login(@Req() request: any) {
-    const { user } = request;
-    const accessTokenCookie = await this.loginUsecaseProxy.getInstance().getCookieWithJwtToken(user.username);
-    const refreshTokenCookie = await this.loginUsecaseProxy.getInstance().getCookieWithJwtRefreshToken(user.username);
-    request.res.setHeader('Set-Cookie', [refreshTokenCookie, accessTokenCookie]);
+  async login(@Body() auth: AuthLoginDto, @Request() request: any) {
+    const accessTokenCookie = await this.loginUsecaseProxy.getInstance().getCookieWithJwtToken(auth.username);
+    const refreshTokenCookie = await this.loginUsecaseProxy.getInstance().getCookieWithJwtRefreshToken(auth.username);
+    request.res.setHeader('Set-Cookie', [accessTokenCookie, refreshTokenCookie]);
     return 'Login successful';
   }
 

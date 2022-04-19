@@ -5,8 +5,6 @@ export class UserWithoutPassword {
   updatedDate: Date;
   lastLogin: Date;
   hashRefreshToken: string;
-
-  constructor() {}
 }
 
 export class UserM extends UserWithoutPassword {
