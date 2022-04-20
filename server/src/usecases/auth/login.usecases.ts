@@ -28,7 +28,7 @@ export class LoginUseCases {
     const secret = this.jwtConfig.getJwtRefreshSecret();
     const expiresIn = this.jwtConfig.getJwtRefreshExpirationTime() + 's';
     const token = this.jwtTokenService.createToken(payload, secret, expiresIn);
-    this.setCurrentRefreshToken(token, username);
+    await this.setCurrentRefreshToken(token, username);
     const cookie = `Refresh=${token}; HttpOnly; Path=/; Max-Age=${this.jwtConfig.getJwtRefreshExpirationTime()}`;
     return cookie;
   }
@@ -66,10 +66,15 @@ export class LoginUseCases {
 
   async getUserIfRefreshTokenMatches(refreshToken: string, username: string) {
     const user = await this.userRepository.getUserByUsername(username);
+    if (!user) {
+      return null;
+    }
+
     const isRefreshTokenMatching = await this.bcryptService.compare(refreshToken, user.hashRefreshToken);
     if (isRefreshTokenMatching) {
       return user;
     }
+
     return null;
   }
 }
