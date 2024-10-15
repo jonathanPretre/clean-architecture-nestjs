@@ -1,11 +1,11 @@
-import { ConnectionOptions } from 'typeorm';
+import { DataSourceOptions } from 'typeorm';
 import * as dotenv from 'dotenv';
 
 if (process.env.NODE_ENV === 'local') {
   dotenv.config({ path: './env/local.env' });
 }
 
-const config: ConnectionOptions = {
+const config: DataSourceOptions = {
   type: 'postgres',
   host: process.env.DATABASE_HOST,
   port: parseInt(process.env.DATABASE_PORT),
@@ -18,9 +18,6 @@ const config: ConnectionOptions = {
   migrationsRun: true,
   migrationsTableName: 'migration_todo',
   migrations: ['database/migrations/**/*{.ts,.js}'],
-  cli: {
-    migrationsDir: 'database/migrations',
-  },
   // ssl: {
   //   rejectUnauthorized: false,
   // },
