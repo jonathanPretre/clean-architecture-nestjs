@@ -1,5 +1,6 @@
-import { Body, Controller, Get, Inject, Post, Req, Request, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Inject, Post, Req, Res, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiBody, ApiExtraModels, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { FastifyReply } from 'fastify';
 
 import { AuthLoginDto } from './auth-dto.class';
 import { IsAuthPresenter } from './auth.presenter';
@@ -39,19 +40,31 @@ export class AuthController {
   @ApiBearerAuth()
   @ApiBody({ type: AuthLoginDto })
   @ApiOperation({ description: 'login' })
-  async login(@Body() auth: AuthLoginDto, @Request() request: any) {
-    const accessTokenCookie = await this.loginUsecaseProxy.getInstance().getCookieWithJwtToken(auth.username);
-    const refreshTokenCookie = await this.loginUsecaseProxy.getInstance().getCookieWithJwtRefreshToken(auth.username);
-    request.res.setHeader('Set-Cookie', [accessTokenCookie, refreshTokenCookie]);
+  async login(@Body() auth: AuthLoginDto, @Res({ passthrough: true }) response: FastifyReply) {
+    const accessTokenInfo = await this.loginUsecaseProxy.getInstance().getCookieWithJwtToken(auth.username);
+    const refreshTokenInfo = await this.loginUsecaseProxy.getInstance().getCookieWithJwtRefreshToken(auth.username);
+
+    response.setCookie('accessToken', accessTokenInfo.token, {
+      path: '/',
+      httpOnly: true,
+      secure: true,
+      maxAge: Number(accessTokenInfo.maxAge),
+    });
+    response.setCookie('refreshToken', refreshTokenInfo.token, {
+      path: '/',
+      httpOnly: true,
+      secure: true,
+      maxAge: Number(refreshTokenInfo.maxAge),
+    });
     return 'Login successful';
   }
 
   @Post('logout')
   @UseGuards(JwtAuthGuard)
   @ApiOperation({ description: 'logout' })
-  async logout(@Request() request: any) {
-    const cookie = await this.logoutUsecaseProxy.getInstance().execute();
-    request.res.setHeader('Set-Cookie', cookie);
+  async logout(@Res({ passthrough: true }) response: FastifyReply) {
+    response.clearCookie('accessToken');
+    response.clearCookie('refreshToken');
     return 'Logout successful';
   }
 
@@ -70,9 +83,14 @@ export class AuthController {
   @Get('refresh')
   @UseGuards(JwtRefreshGuard)
   @ApiBearerAuth()
-  async refresh(@Req() request: any) {
-    const accessTokenCookie = await this.loginUsecaseProxy.getInstance().getCookieWithJwtToken(request.user.username);
-    request.res.setHeader('Set-Cookie', accessTokenCookie);
+  async refresh(@Req() request: any, @Res({ passthrough: true }) response: FastifyReply) {
+    const accessTokenInfo = await this.loginUsecaseProxy.getInstance().getCookieWithJwtToken(request.user.username);
+    response.setCookie('accessToken', accessTokenInfo.token, {
+      path: '/',
+      httpOnly: true,
+      secure: true,
+      maxAge: Number(accessTokenInfo.maxAge),
+    });
     return 'Refresh successful';
   }
 }

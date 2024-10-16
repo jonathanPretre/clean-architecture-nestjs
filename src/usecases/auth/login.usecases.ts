@@ -19,7 +19,7 @@ export class LoginUseCases {
     const secret = this.jwtConfig.getJwtSecret();
     const expiresIn = this.jwtConfig.getJwtExpirationTime() + 's';
     const token = this.jwtTokenService.createToken(payload, secret, expiresIn);
-    return `Authentication=${token}; HttpOnly; Path=/; Max-Age=${this.jwtConfig.getJwtExpirationTime()}`;
+    return { token, maxAge: this.jwtConfig.getJwtExpirationTime() };
   }
 
   async getCookieWithJwtRefreshToken(username: string) {
@@ -29,8 +29,10 @@ export class LoginUseCases {
     const expiresIn = this.jwtConfig.getJwtRefreshExpirationTime() + 's';
     const token = this.jwtTokenService.createToken(payload, secret, expiresIn);
     await this.setCurrentRefreshToken(token, username);
-    const cookie = `Refresh=${token}; HttpOnly; Path=/; Max-Age=${this.jwtConfig.getJwtRefreshExpirationTime()}`;
-    return cookie;
+    return {
+      token,
+      maxAge: this.jwtConfig.getJwtRefreshExpirationTime(),
+    };
   }
 
   async validateUserForLocalStragtegy(username: string, pass: string) {

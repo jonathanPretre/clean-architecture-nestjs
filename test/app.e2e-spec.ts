@@ -1,7 +1,6 @@
-import * as request from 'supertest';
 import { Test } from '@nestjs/testing';
-import { ExecutionContext, INestApplication } from '@nestjs/common';
-import * as cookieParser from 'cookie-parser';
+import { ExecutionContext } from '@nestjs/common';
+import fastifyCookie from '@fastify/cookie';
 import { UseCaseProxy } from '../src/infrastructure/usecases-proxy/usecases-proxy';
 import { UsecasesProxyModule } from '../src/infrastructure/usecases-proxy/usecases-proxy.module';
 import { LoginUseCases } from '../src/usecases/auth/login.usecases';
@@ -9,9 +8,10 @@ import { IsAuthenticatedUseCases } from '../src/usecases/auth/isAuthenticated.us
 import { AppModule } from '../src/app.module';
 import { JwtAuthGuard } from '../src/infrastructure/common/guards/jwtAuth.guard';
 import JwtRefreshGuard from '../src/infrastructure/common/guards/jwtRefresh.guard';
+import { FastifyAdapter, NestFastifyApplication } from '@nestjs/platform-fastify';
 
 describe('infrastructure/controllers/auth', () => {
-  let app: INestApplication;
+  let app: NestFastifyApplication;
   let loginUseCase: LoginUseCases;
   let isAuthenticatedUseCases: IsAuthenticatedUseCases;
 
@@ -42,7 +42,7 @@ describe('infrastructure/controllers/auth', () => {
         canActivate(context: ExecutionContext) {
           const req = context.switchToHttp().getRequest();
           req.user = { username: 'username' };
-          return JSON.stringify(req.cookies) === JSON.stringify({ Authentication: '123456', Path: '/', 'Max-Age': '1800' });
+          return req.cookies.accessToken === '123456';
         },
       })
       .overrideGuard(JwtRefreshGuard)
@@ -55,12 +55,13 @@ describe('infrastructure/controllers/auth', () => {
       })
       .compile();
 
-    app = moduleRef.createNestApplication();
-    app.use(cookieParser());
+    app = moduleRef.createNestApplication<NestFastifyApplication>(new FastifyAdapter());
+    await app.register(fastifyCookie);
     await app.init();
+    await app.getHttpAdapter().getInstance().ready();
   });
 
-  it(`/POST login should return 201`, async (done) => {
+  it(`/POST login should return 201`, async () => {
     const createDate = new Date().toISOString();
     const updatedDate = new Date().toISOString();
     (loginUseCase.validateUserForLocalStragtegy as jest.Mock).mockReturnValue(
@@ -73,79 +74,99 @@ describe('infrastructure/controllers/auth', () => {
         hashRefreshToken: null,
       }),
     );
-    (loginUseCase.getCookieWithJwtToken as jest.Mock).mockReturnValue(
-      Promise.resolve(`Authentication=123456; HttpOnly; Path=/; Max-Age=${process.env.JWT_EXPIRATION_TIME}`),
-    );
+    (loginUseCase.getCookieWithJwtToken as jest.Mock).mockReturnValue(Promise.resolve({ token: '123456', maxAge: '1800' }));
     (loginUseCase.getCookieWithJwtRefreshToken as jest.Mock).mockReturnValue(
-      Promise.resolve(`Refresh=12345; HttpOnly; Path=/; Max-Age=${process.env.JWT_REFRESH_TOKEN_EXPIRATION_TIME}`),
+      Promise.resolve({ token: '12345', maxAge: '86400' }),
     );
 
-    const result = await request(app.getHttpServer())
-      .post('/auth/login')
-      .send({ username: 'username', password: 'password' })
-      .expect(201);
-
-    expect(result.headers['set-cookie']).toEqual([
-      `Authentication=123456; HttpOnly; Path=/; Max-Age=1800`,
-      `Refresh=12345; HttpOnly; Path=/; Max-Age=86400`,
-    ]);
-
-    done();
+    await app
+      .inject({
+        method: 'POST',
+        url: '/auth/login',
+        payload: { username: 'username', password: 'password' },
+      })
+      .then((result) => {
+        expect(result.statusCode).toEqual(201);
+        expect(result.headers['set-cookie']).toEqual([
+          `accessToken=123456; Max-Age=1800; Path=/; HttpOnly; Secure`,
+          `refreshToken=12345; Max-Age=86400; Path=/; HttpOnly; Secure`,
+        ]);
+      });
   });
 
-  it(`/POST logout should return 201`, async (done) => {
-    const result = await request(app.getHttpServer())
-      .post('/auth/logout')
-      .set('Cookie', ['Authentication=123456; HttpOnly; Path=/; Max-Age=1800'])
-      .send()
-      .expect(201);
-
-    expect(result.headers['set-cookie']).toEqual([
-      'Authentication=; HttpOnly; Path=/; Max-Age=0',
-      'Refresh=; HttpOnly; Path=/; Max-Age=0',
-    ]);
-
-    done();
+  it(`/POST logout should return 201`, async () => {
+    app
+      .inject({
+        method: 'POST',
+        cookies: { accessToken: '123456' },
+        url: '/auth/logout',
+        payload: { username: 'username', password: 'password' },
+      })
+      .then((result) => {
+        expect(result.statusCode).toEqual(201);
+        expect(result.headers['set-cookie']).toEqual([
+          'accessToken=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT',
+          'refreshToken=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT',
+        ]);
+      });
   });
 
-  it(`/POST login should return 401`, async (done) => {
+  it(`/POST login should return 401`, async () => {
     (loginUseCase.validateUserForLocalStragtegy as jest.Mock).mockReturnValue(Promise.resolve(null));
 
-    await request(app.getHttpServer()).post('/auth/login').send({ username: 'username', password: 'password' }).expect(401);
-
-    done();
+    await app
+      .inject({
+        method: 'POST',
+        url: '/auth/login',
+        payload: { username: 'username', password: 'password' },
+      })
+      .then((result) => {
+        expect(result.statusCode).toEqual(401);
+      });
   });
 
-  it(`/POST Refresh token should return 201`, async (done) => {
-    (loginUseCase.getCookieWithJwtToken as jest.Mock).mockReturnValue(
-      Promise.resolve(`Authentication=123456; HttpOnly; Path=/; Max-Age=${process.env.JWT_EXPIRATION_TIME}`),
-    );
+  it(`/POST Refresh token should return 201`, async () => {
+    (loginUseCase.getCookieWithJwtToken as jest.Mock).mockReturnValue({
+      token: '123456',
+      maxAge: process.env.JWT_EXPIRATION_TIME,
+    });
 
-    const result = await request(app.getHttpServer()).get('/auth/refresh').send().expect(200);
-
-    expect(result.headers['set-cookie']).toEqual([`Authentication=123456; HttpOnly; Path=/; Max-Age=1800`]);
-
-    done();
+    app
+      .inject({
+        method: 'GET',
+        url: '/auth/refresh',
+      })
+      .then((result) => {
+        expect(result.statusCode).toEqual(200);
+        expect(result.headers['set-cookie']).toEqual('accessToken=123456; Max-Age=1800; Path=/; HttpOnly; Secure');
+      });
   });
 
-  it(`/GET is_authenticated should return 200`, async (done) => {
+  it(`/GET is_authenticated should return 200`, async () => {
     (isAuthenticatedUseCases.execute as jest.Mock).mockReturnValue(Promise.resolve({ username: 'username' }));
 
-    await request(app.getHttpServer())
-      .get('/auth/is_authenticated')
-      .set('Cookie', ['Authentication=123456; HttpOnly; Path=/; Max-Age=1800'])
-      .send()
-      .expect(200);
-
-    done();
+    app
+      .inject({
+        method: 'GET',
+        url: '/auth/is_authenticated',
+        cookies: { accessToken: '123456' },
+      })
+      .then((result) => {
+        expect(result.statusCode).toEqual(200);
+      });
   });
 
-  it(`/GET is_authenticated should return 403`, async (done) => {
+  it(`/GET is_authenticated should return 403`, async () => {
     (isAuthenticatedUseCases.execute as jest.Mock).mockReturnValue(Promise.resolve({ username: 'username' }));
 
-    await request(app.getHttpServer()).get('/auth/is_authenticated').send().expect(403);
-
-    done();
+    app
+      .inject({
+        method: 'GET',
+        url: '/auth/is_authenticated',
+      })
+      .then((result) => {
+        expect(result.statusCode).toEqual(403);
+      });
   });
 
   afterAll(async () => {

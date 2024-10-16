@@ -19,7 +19,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     super({
       jwtFromRequest: ExtractJwt.fromExtractors([
         (request: Request) => {
-          return request?.cookies?.Authentication;
+          return request.cookies.accessToken;
         },
       ]),
       secretOrKey: process.env.JWT_SECRET,
@@ -27,7 +27,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   async validate(payload: any) {
-    const user = this.loginUsecaseProxy.getInstance().validateUserForJWTStragtegy(payload.username);
+    const user = await this.loginUsecaseProxy.getInstance().validateUserForJWTStragtegy(payload.username);
     if (!user) {
       this.logger.warn('JwtStrategy', `User not found`);
       this.exceptionService.UnauthorizedException({ message: 'User not found' });

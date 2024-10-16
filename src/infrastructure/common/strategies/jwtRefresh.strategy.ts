@@ -22,7 +22,7 @@ export class JwtRefreshTokenStrategy extends PassportStrategy(Strategy, 'jwt-ref
     super({
       jwtFromRequest: ExtractJwt.fromExtractors([
         (request: Request) => {
-          return request?.cookies?.Refresh;
+          return request?.cookies?.refreshToken;
         },
       ]),
       secretOrKey: configService.getJwtRefreshSecret(),
@@ -31,7 +31,7 @@ export class JwtRefreshTokenStrategy extends PassportStrategy(Strategy, 'jwt-ref
   }
 
   async validate(request: Request, payload: TokenPayload) {
-    const refreshToken = request.cookies?.Refresh;
+    const refreshToken = request.cookies?.refreshToken;
     const user = this.loginUsecaseProxy.getInstance().getUserIfRefreshTokenMatches(refreshToken, payload.username);
     if (!user) {
       this.logger.warn('JwtStrategy', `User not found or hash not correct`);
